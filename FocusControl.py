@@ -189,7 +189,9 @@ class FocusControl(ControlSurface):
                 False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_RECORD))
             self.transport.set_seek_buttons(ButtonElement(True, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_FAST_FORWARD), ButtonElement(
                 True, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_REWIND))
-            self.transport.set_loop_button(ButtonElement(
+            # self.transport.set_loop_button(ButtonElement(
+            #     False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_LOOP))
+            self.transport.set_overdub_button(ButtonElement(
                 False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_LOOP))
 
         self._assign_tracks()
