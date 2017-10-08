@@ -41,10 +41,15 @@ SID_TRANSPORT_FAST_FORWARD = 92
 SID_TRANSPORT_STOP = 93
 SID_TRANSPORT_PLAY = 94
 SID_TRANSPORT_RECORD = 95
-transport_control_switch_ids = range(
-    SID_TRANSPORT_REWIND, SID_TRANSPORT_RECORD + 1)
 SID_LAST = 112
-
+transport_control_switch_ids = {
+    SID_TRANSPORT_LOOP: 'LOOP',
+    SID_TRANSPORT_REWIND: 'REWIND',
+    SID_TRANSPORT_FAST_FORWARD: 'FAST_FORWARD',
+    SID_TRANSPORT_STOP: 'STOP',
+    SID_TRANSPORT_PLAY: 'PLAY',
+    SID_TRANSPORT_RECORD: 'RECORD',
+}
 
 PARAM_PREFIX = 'NIKB'
 PLUGIN_PREFIX = 'Komplete Kontrol'
@@ -209,11 +214,17 @@ class FocusControl(ControlSurface):
         self.__update_play_button_led()
 
     def receive_midi(self, midi_bytes):
-        #debug_out("receive_midi() called: " + str(midi_bytes[0] & 240))
-        if midi_bytes[0] & 240 == MIDI_NOTE_ON_STATUS or midi_bytes[0] & 240 == MIDI_NOTE_OFF_STATUS:
+        midi_status = midi_bytes[0] & 240
+        debug_out("receive_midi() called: %s (note_on=%s, note_off=%s)" % (
+            str(midi_status), MIDI_NOTE_ON_STATUS, MIDI_NOTE_OFF_STATUS))
+        if midi_status == MIDI_NOTE_ON_STATUS or midi_status == MIDI_NOTE_OFF_STATUS:
             note = midi_bytes[1]
             value = BUTTON_PRESSED if midi_bytes[2] > 0 else BUTTON_RELEASED
+            debug_out("midi note received: note=%s, value=%s" %
+                      (note, value))
             if note in transport_control_switch_ids:
+                debug_out("transport received: note=%s, value=%s, transport=%s" % (
+                    note, value, transport_control_switch_ids[note]))
                 self.handle_transport_switch_ids(note, value)
 
         super(FocusControl, self).receive_midi(midi_bytes)
