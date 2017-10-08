@@ -24,6 +24,8 @@ Created on 13.10.2013
 @author: Eric Ahrens
 '''
 
+DEVICE_ROLE_DAW = 'KOMPLETE_KONTROL_DAW'
+DEVICE_ROLE_MIDI_KEYBOARD = 'KOMPLETE_KONTROL_MIDI_KEYBOARD'
 
 GLOBAL_CHANNEL = 0
 
@@ -149,9 +151,10 @@ class FocusControl(ControlSurface):
 
     controlled_track = None
 
-    def __init__(self, c_instance):
+    def __init__(self, c_instance, device_role):
         super(FocusControl, self).__init__(c_instance)
         self.song().add_is_playing_listener(self.__update_play_button_led)
+        self.device_role = device_role
 
         register_sender(self)  # For Debug Output only
         self._active = False
@@ -183,21 +186,22 @@ class FocusControl(ControlSurface):
             self._active = True
             self._suppress_send_midi = False
 
-            # Transport controls - instantiate a TransportComponent. The default behavior when setting transport buttons
-            # works well for most buttons, but not the stop button (since default for stop button is never lighting up)
-            # so that one is handled manually.
-            self.transport = TransportComponent()
-            # ButtonElement(is_momentary, msg_type, channel, identifier)
-            self.transport.set_play_button(ButtonElement(
-                False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_PLAY))
-            self.transport.set_record_button(ButtonElement(
-                False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_RECORD))
-            self.transport.set_seek_buttons(ButtonElement(True, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_FAST_FORWARD), ButtonElement(
-                True, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_REWIND))
-            # self.transport.set_loop_button(ButtonElement(
-            #     False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_LOOP))
-            self.transport.set_overdub_button(ButtonElement(
-                False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_LOOP))
+            if self.device_role == DEVICE_ROLE_DAW:
+                # Transport controls - instantiate a TransportComponent. The default behavior when setting transport buttons
+                # works well for most buttons, but not the stop button (since default for stop button is never lighting up)
+                # so that one is handled manually.
+                self.transport = TransportComponent()
+                # ButtonElement(is_momentary, msg_type, channel, identifier)
+                self.transport.set_play_button(ButtonElement(
+                    False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_PLAY))
+                self.transport.set_record_button(ButtonElement(
+                    False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_RECORD))
+                self.transport.set_seek_buttons(ButtonElement(True, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_FAST_FORWARD), ButtonElement(
+                    True, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_REWIND))
+                # self.transport.set_loop_button(ButtonElement(
+                #     False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_LOOP))
+                self.transport.set_overdub_button(ButtonElement(
+                    False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_LOOP))
 
         self._assign_tracks()
         ctrack = self.get_controlled_track()
@@ -223,9 +227,14 @@ class FocusControl(ControlSurface):
             debug_out("midi note received: note=%s, value=%s" %
                       (note, value))
             if note in transport_control_switch_ids:
-                debug_out("transport received: note=%s, value=%s, transport=%s" % (
-                    note, value, transport_control_switch_ids[note]))
-                self.handle_transport_switch_ids(note, value)
+                if self.device_role == DEVICE_ROLE_DAW:
+                    debug_out("transport received: note=%s, value=%s, transport=%s" % (
+                        note, value, transport_control_switch_ids[note]))
+                    self.handle_transport_switch_ids(note, value)
+                else:
+                    debug_out("transport ignored: note=%s, value=%s, transport=%s" % (
+                        note, value, transport_control_switch_ids[note]))
+                    return
 
         super(FocusControl, self).receive_midi(midi_bytes)
 
@@ -245,9 +254,8 @@ class FocusControl(ControlSurface):
                 self.forward_button_down = False
             self.__update_forward_rewind_leds()
 
-        elif switch_id == SID_TRANSPORT_STOP:
-            if value == BUTTON_PRESSED:
-                self.__stop_song()
+        elif self.device_role == DEVICE_ROLE_DAW and switch_id == SID_TRANSPORT_STOP and value == BUTTON_PRESSED:
+            self.__stop_song()
 
     def __stop_song(self):
         self.song().stop_playing()
@@ -288,9 +296,11 @@ class FocusControl(ControlSurface):
             is_momentary, MIDI_CC_TYPE, 0, SID_NAV_RIGHT)
         self._do_left.subject = self.left_button
         self._do_right.subject = self.right_button
-        self.stop_button = ButtonElement(
-            False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_STOP)
-        self._do_stop.subject = self.stop_button
+
+        if self.device_role == DEVICE_ROLE_DAW:
+            self.stop_button = ButtonElement(
+                False, MIDI_NOTE_TYPE, 0, SID_TRANSPORT_STOP)
+            self._do_stop.subject = self.stop_button
 
     def set_up_encoders(self, device):
         parameter_encoders = []

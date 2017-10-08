@@ -1,10 +1,10 @@
 #__init__.py
-from FocusControl import FocusControl, log
+from FocusControl import FocusControl, log, DEVICE_ROLE_DAW, DEVICE_ROLE_MIDI_KEYBOARD
 
 
 def create_instance(c_instance):
     log('Komplete_Kontrol creating instance')
-    return FocusControl(c_instance)
+    return FocusControl(c_instance, DEVICE_ROLE_MIDI_KEYBOARD)
 
 
 from _Framework.Capabilities import *
