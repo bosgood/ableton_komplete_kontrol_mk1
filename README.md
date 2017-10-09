@@ -22,8 +22,8 @@ This is a replacement for the Host Integration scripts for using the Komplete Ko
 
 * Download a copy of this repo from the Releases page.
 * ‎Close any running copies of Ableton Live.
-* ‎Unpack the contents of the archive into your Ableton `MIDI Remote Scripts` folder, using the same location as [in the documentation](https://support.native-instruments.com/hc/en-us/articles/209557689), currently `/Library/Application Support/Native Instruments/Host Integration/Ableton Live` at the time of writing.
-* ‎Using Controller Editor, create configuration pages for the encoder knobs:
+* Unpack the contents of the archive into your Ableton `MIDI Remote Scripts` folder, using the same location as [in the documentation](https://support.native-instruments.com/hc/en-us/articles/209557689).
+* Using Controller Editor, create configuration pages for the encoder knobs:
   1. Devices - ![devices configuration screenshot](https://raw.githubusercontent.com/bosgood/ableton_komplete_kontrol_mk1/gh-pages/assets/controller-editor-devices-screenshot.png)
     1. Name=DEV1, Type=Control Change, Channel=1, Number=22, Mode=Absolute, RangeFrom=0, RangeTo=127, Display=Unipolar
     1. Name=DEV2, Type=Control Change, Channel=1, Number=23, Mode=Absolute, RangeFrom=0, RangeTo=127, Display=Unipolar
