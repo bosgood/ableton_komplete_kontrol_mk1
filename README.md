@@ -63,4 +63,4 @@ Ableton controls will not be active when a KK instance is selected (use Shift+In
 
 ## Questions?
 
-Your question may already have been answered in the [original announcement post](https://www.reddit.com/r/NativeInstruments/). Otherwise feel free to DM me on [Reddit](https://www.reddit.com/user/bosgood/) for help.
+Your question may already have been answered in the [original announcement post](https://www.reddit.com/r/NativeInstruments/comments/75azdz/ableton_komplete_kontrol_mk1_advanced_integration/). Otherwise feel free to DM me on [Reddit](https://www.reddit.com/user/bosgood/) for help.
