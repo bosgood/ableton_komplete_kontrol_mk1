@@ -20,7 +20,7 @@ This is a replacement for the Host Integration scripts for using the Komplete Ko
 
 ## Installation
 
-* Download a copy of this repo from the Releases page.
+* Download a copy of this repo from the [Releases page](https://github.com/bosgood/ableton_komplete_kontrol_mk1/releases).
 * ‎Close any running copies of Ableton Live.
 * Unpack the contents of the archive into your Ableton `MIDI Remote Scripts` folder, using the same location as [in the documentation](https://support.native-instruments.com/hc/en-us/articles/209557689).
 * Using Controller Editor, create configuration pages for the encoder knobs:
