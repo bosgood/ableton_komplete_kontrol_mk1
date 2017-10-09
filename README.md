@@ -4,7 +4,7 @@ This is a replacement for the Host Integration scripts for using the Komplete Ko
 
 **Do I need this?** Yes, if you want to control Ableton track volume faders and device macro controls from your controller.
 
-![keyboards](https://raw.githubusercontent.com/bosgood/ableton_komplete_kontrol_mk1/gh-pages/assets/img-komplete_kontrol_overview_01.jpg)
+![keyboards](https://raw.githubusercontent.com/bosgood/ableton_komplete_kontrol_mk1/gh-pages/assets/ableton-komplete-kontrol.jpg)
 
 ## Features
 
