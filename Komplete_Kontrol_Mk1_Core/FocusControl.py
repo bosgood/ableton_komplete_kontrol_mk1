@@ -562,10 +562,9 @@ class FocusControl(ControlSurface):
             debug_out("Not re-activating controlled track %s" % track.name)
 
     def activate_track(self, index, track, instr):
-        instr_type = "NI" if (
-            instr is not None and instr[1] is not None) else "non-NI"
+        is_ni = instr is not None and instr[1] is not None
         debug_out("ACTIVATE_TRACK(): %s %s (%s)" %
-                  (track.name, str(instr), instr_type))
+                  (track.name, str(instr), "NI" if is_ni else "non-NI"))
         track.arm = True
         self.update_status_midi(index, track, instr, 1)
 
