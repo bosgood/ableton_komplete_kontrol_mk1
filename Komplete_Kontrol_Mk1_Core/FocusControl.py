@@ -10,6 +10,7 @@ from GUtil import debug_out, register_sender
 from _Generic import GenericScript
 from _Generic.SpecialMixerComponent import SpecialMixerComponent
 
+from _Framework import Task
 from _Framework.ControlSurface import ControlSurface
 from _Framework.InputControlElement import *
 from _Framework.ButtonElement import ButtonElement, ON_VALUE, OFF_VALUE
@@ -110,34 +111,49 @@ def arm_smart(song, track=None):
 
 class TrackElement:
 
-    arm = False
+    allow_activate_track = False
 
     def __init__(self, index, track, receiver, *a, **k):
         self.index = index
         self.track = track
+
         if track.can_be_armed:
-            self.arm = track.arm
+            debug_out("Track can be armed: %s, %s" % (track.name, str(track)))
+            self.allow_activate_track = True
             track.add_arm_listener(self._changed_arming)
+            track.add_implicit_arm_listener(self._changed_implicit_arming)
+        else:
+            debug_out("Track cannot be armed: %s, %s" %
+                      (track.name, str(track)))
+
         track.add_devices_listener(self._changed_devices)
 
         self.receiver = receiver
 
+    def _changed_implicit_arming(self):
+        debug_out("_changed_implicit_arming called on: %s, %s" %
+                  (self.track.name, str(self.track)))
+        self._handle_track_armed()
+
     def _changed_arming(self):
-        #debug_out(" _changed_arming() called")
-        if self.arm != self.track.arm:
-            self.arm = self.track.arm
-            if self.track.arm:
-                self.receiver.activate_track(self.index, self.track)
-            else:
-                self.receiver.deactivate_track(self.index, self.track)
+        debug_out(" _changed_arming() called")
+        self._handle_track_armed()
+
+    def _handle_track_armed(self):
+        if not self.track.arm and not self.track.implicit_arm:
+            self.receiver.deactivate_track(self.index, self.track)
+        elif self.allow_activate_track and (self.track.arm or self.track.implicit_arm):
+            self.receiver.control_track(self.index, self.track)
 
     def _changed_devices(self):
-        if self.arm:
+        if self.allow_activate_track:
             self.receiver.devices_changed(self.index, self.track)
 
     def release(self):
         if self.track and self.track.can_be_armed:
             self.track.remove_arm_listener(self._changed_arming)
+            self.track.remove_implicit_arm_listener(
+                self._changed_implicit_arming)
         if self.track:
             self.track.remove_devices_listener(self._changed_devices)
         self.receiver = None
@@ -157,6 +173,8 @@ class FocusControl(ControlSurface):
         self.device_role = device_role
 
         register_sender(self)  # For Debug Output only
+
+        debug_out(str(dir(self)))
         self._active = False
         self._tracks = []
         self.rewind_button_down = False
@@ -485,7 +503,7 @@ class FocusControl(ControlSurface):
         tracks = self.song().tracks
 
         for track in tracks:
-            if track.can_be_armed and track.arm:
+            if track.can_be_armed and (track.arm or track.implicit_arm):
                 armed_tracks.append(track)
 
         if len(armed_tracks) == 1:
@@ -525,13 +543,29 @@ class FocusControl(ControlSurface):
         for index in range(len(tracks)):
             self._tracks.append(TrackElement(index, tracks[index], self))
 
-    def activate_track(self, index, track):
-        self.controlled_track = track
-        instr = self.find_instrument_list(track.devices)
-        #debug_out(" ACTIVATE_TRACK(): " + track.name + "   " + str(instr))
+    def control_track(self, index, track):
+        if self.controlled_track != track:
+            self.controlled_track = track
+            instr = self.find_instrument_list(track.devices)
+            debug_out("CONTROL_TRACK(): " +
+                      track.name + "   " + str(instr))
+            if track.implicit_arm and not track.arm:
+                debug_out("going to arm implicit_armed track")
+
+            run_task = Task.run(
+                lambda: self.activate_track(index, track, instr))
+            task_seq = Task.sequence(Task.delay(1), run_task)
+            self._tasks.add(task_seq)
+        else:
+            debug_out("Not re-activating controlled track %s" % track.name)
+
+    def activate_track(self, index, track, instr):
+        debug_out("ACTIVATE_TRACK(): %s %s" % (track.name, str(instr)))
+        track.arm = True
         self.update_status_midi(index, track, instr, 1)
 
     def deactivate_track(self, index, track):
+        debug_out("DEACTIVATE_TRACK called: %s" % track.name)
         pass
         #instr = self.find_instrument_list(track.devices)
         #self.update_status_midi(index, track, instr, 0)
@@ -540,7 +574,7 @@ class FocusControl(ControlSurface):
         #debug_out("NO Controlled Track ")
 
     def devices_changed(self, index, track):
-        #debug_out(" DEVICES_CHANGED() Track " + str(index) + " " + track.name)
+        debug_out(" DEVICES_CHANGED() Track " + str(index) + " " + track.name)
         instr = self.find_instrument_list(track.devices)
         self.update_status_midi(index, track, instr, 1)
 
@@ -553,13 +587,15 @@ class FocusControl(ControlSurface):
         if ctrack:
             track = ctrack[0]
             instr = ctrack[1]
-            #debug_out("_ON_TRACK_LIST_CHANGED() called " + str(instr))
+            debug_out("_ON_TRACK_LIST_CHANGED() called " + str(instr))
             if track != self.controlled_track:
                 self.controlled_track = track
                 index = list(self.song().tracks).index(track)
+                debug_out(
+                    "_ON_TRACK_LIST_CHANGED: current track is not controlled_track")
                 #self.update_status_midi(index, track, instr, 1)
         elif self.controlled_track:  # No Armed Track with Instrument
-            #debug_out(" No More Controlled Track")
+            debug_out(" No More Controlled Track")
             self.controlled_track = None
 
     def _on_selected_track_changed(self):
