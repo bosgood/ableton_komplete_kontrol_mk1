@@ -560,18 +560,21 @@ class FocusControl(ControlSurface):
             debug_out("Not re-activating controlled track %s" % track.name)
 
     def activate_track(self, index, track, instr):
-        debug_out("ACTIVATE_TRACK(): %s %s" % (track.name, str(instr)))
+        instr_type = "NI" if (
+            instr is not None and instr[1] is not None) else "non-NI"
+        debug_out("ACTIVATE_TRACK(): %s %s (%s)" %
+                  (track.name, str(instr), instr_type))
         track.arm = True
         self.update_status_midi(index, track, instr, 1)
 
     def deactivate_track(self, index, track):
         debug_out("DEACTIVATE_TRACK called: %s" % track.name)
-        pass
-        #instr = self.find_instrument_list(track.devices)
-        #self.update_status_midi(index, track, instr, 0)
-        # if self.controlled_track and self.controlled_track == track:
-        #self.controlled_track = None
-        #debug_out("NO Controlled Track ")
+        instr = self.find_instrument_list(track.devices)
+        self.update_status_midi(index, track, instr, 0)
+
+        if self.controlled_track and self.controlled_track == track:
+            self.controlled_track = None
+            debug_out("NO Controlled Track ")
 
     def devices_changed(self, index, track):
         debug_out(" DEVICES_CHANGED() Track " + str(index) + " " + track.name)
@@ -605,14 +608,14 @@ class FocusControl(ControlSurface):
         # Block below was commented out because focus only follows track
         # arming, not selection. -kurt
 
-        #self._on_devices_changed.subject = self.song().view.selected_track
-        #track = self.song().view.selected_track
-        #debug_out(" Changed Selected Track " + track.name)
+        # self._on_devices_changed.subject = self.song().view.selected_track
+        # track = self.song().view.selected_track
+        # debug_out(" Changed Selected Track " + track.name)
         # if track.can_be_armed and track.arm:
-        #self.controlled_track = track
-        #instr = self.find_instrument_list(track.devices)
-        #index = list(self.song().tracks).index(track)
-        #self.update_status_midi(index, track, instr, 1)
+        #     self.controlled_track = track
+        # instr = self.find_instrument_list(track.devices)
+        # index = list(self.song().tracks).index(track)
+        # self.update_status_midi(index, track, instr, 1)
 
     def broadcast(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -646,8 +649,10 @@ class FocusControl(ControlSurface):
         return None
 
     def find_instrument(self, device):
-        #debug_out(" find_instrument() called")
+        debug_out("find_instrument() called. type=%s, name=%s, class_name=%s, class_display_name=%s, parameters=%s" % (
+            device.type, device.name, device.class_name, device.class_display_name, ','.join([p.name for p in device.parameters])))
         if device.type == 1:
+            debug_out("find_instrument() found device type 1")
             if device.can_have_chains:
                 chains = device.chains
                 for chain in chains:
@@ -655,13 +660,18 @@ class FocusControl(ControlSurface):
                     if instr:
                         return instr
             elif (device.class_name == PLUGIN_CLASS_NAME_VST or device.class_name == PLUGIN_CLASS_NAME_AU) and (device.class_display_name.startswith(PLUGIN_PREFIX)):
-                parms = device.parameters
-                if parms and len(parms) > 1:
-                    pn = parms[1].name
+                device_params = device.parameters
+                debug_out("find_instrument() found NI device")
+                if device_params and len(device_params) > 1:
+                    pn = device_params[1].name
+                    debug_out("device_params[1].name=%s" % (pn,))
                     pnLen = len(pn)
                     if pn.startswith(PARAM_PREFIX):
                         #debug_out("pn[1] starts with " + PARAM_PREFIX + " and str(pn[4:pnLen]) = " + str(pn[4:pnLen]))
                         return (str(device.class_display_name), str(pn[4:pnLen]))
+                else:
+                    debug_out(
+                        "insufficient device parameters. device attrs=%s" % str(dir(device)))
             return (device.class_display_name, None)
         return None
 
