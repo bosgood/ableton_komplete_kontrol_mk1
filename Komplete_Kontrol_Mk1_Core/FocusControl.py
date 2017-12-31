@@ -117,14 +117,16 @@ class TrackElement:
         self.index = index
         self.track = track
 
-        if track.can_be_armed:
-            debug_out("Track can be armed: %s, %s" % (track.name, str(track)))
-            self.allow_activate_track = True
-            track.add_arm_listener(self._changed_arming)
-            track.add_implicit_arm_listener(self._changed_implicit_arming)
-        else:
-            debug_out("Track cannot be armed: %s, %s" %
-                      (track.name, str(track)))
+        if receiver.device_role == DEVICE_ROLE_DAW:
+            if track.can_be_armed:
+                debug_out("Track can be armed: %s, %s" %
+                          (track.name, str(track)))
+                self.allow_activate_track = True
+                track.add_arm_listener(self._changed_arming)
+                track.add_implicit_arm_listener(self._changed_implicit_arming)
+            else:
+                debug_out("Track cannot be armed: %s, %s" %
+                          (track.name, str(track)))
 
         track.add_devices_listener(self._changed_devices)
 
