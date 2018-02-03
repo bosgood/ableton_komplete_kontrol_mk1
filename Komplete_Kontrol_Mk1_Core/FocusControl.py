@@ -508,10 +508,11 @@ class FocusControl(ControlSurface):
             if track.can_be_armed and (track.arm or track.implicit_arm):
                 armed_tracks.append(track)
 
-        if len(armed_tracks) == 1:
-            return (armed_tracks[0], self.find_instrument_list(armed_tracks[0].devices))
+        # if len(armed_tracks) == 1:
+        # return (armed_tracks[0],
+        # self.find_instrument_list(armed_tracks[0].devices))
 
-        if len(armed_tracks) > 1:
+        if len(armed_tracks) > 0:
             instr = self.find_instrument_ni(armed_tracks)
             if instr:
                 return instr
@@ -523,7 +524,7 @@ class FocusControl(ControlSurface):
     def find_instrument_ni(self, tracks):
         for track in tracks:
             instr = self.find_instrument_list(track.devices)
-            if instr and instr[1] != None:
+            if instr and instr[1] is not None:
                 return (track, instr)
         return None
 
@@ -653,11 +654,25 @@ class FocusControl(ControlSurface):
         return None
 
     def find_in_chain(self, chain):
+        devices_instr_pairs = []
         for device in chain.devices:
             instr = self.find_instrument(device)
             if instr:
-                return instr
-        return None
+                debug_out("Found instrument. device=%s, instr=%s, chain=%s" % (
+                    device, instr, chain))
+                devices_instr_pairs.append((device, instr))
+
+        for (device, instr) in devices_instr_pairs:
+            if self.device_is_ni(device):
+                return (device, instr)
+
+        if len(devices_instr_pairs) > 0:
+            return devices_instr_pairs[0]
+
+        return (None, None)
+
+    def device_is_ni(self, device):
+        return (device.class_name == PLUGIN_CLASS_NAME_VST or device.class_name == PLUGIN_CLASS_NAME_AU) and (device.class_display_name.startswith(PLUGIN_PREFIX))
 
     def find_instrument(self, device):
         debug_out("find_instrument() called. type=%s, name=%s, class_name=%s, class_display_name=%s, parameters=%s" % (
@@ -666,11 +681,19 @@ class FocusControl(ControlSurface):
             debug_out("find_instrument() found device type 1")
             if device.can_have_chains:
                 chains = device.chains
+                device_instr_pairs = []
                 for chain in chains:
-                    instr = self.find_in_chain(chain)
+                    (device, instr) = self.find_in_chain(chain)
                     if instr:
-                        return instr
-            elif (device.class_name == PLUGIN_CLASS_NAME_VST or device.class_name == PLUGIN_CLASS_NAME_AU) and (device.class_display_name.startswith(PLUGIN_PREFIX)):
+                        if self.device_is_ni(device):
+                            return self.find_instrument(device)
+
+                        device_instr_pairs.append((device, instr))
+
+                if len(device_instr_pairs) > 0:
+                    return self.find_instrument(device_instr_pairs[0][0])
+
+            elif self.device_is_ni(device):
                 device_params = device.parameters
                 debug_out("find_instrument() found NI device")
                 if device_params and len(device_params) > 1:
@@ -684,6 +707,7 @@ class FocusControl(ControlSurface):
                     debug_out(
                         "insufficient device parameters. device attrs=%s" % str(dir(device)))
             return (device.class_display_name, None)
+
         return None
 
     def scan_chain(self, chain):
