@@ -577,15 +577,15 @@ class FocusControl(ControlSurface):
             self.controlled_track = None
             debug_out("Releasing controlled Track")
 
-            # Reactivate another track is there were multiple ones armed
-            ctrack = self.get_controlled_track()
-            if ctrack:
-                debug_out("Activating other armed track: %s" % track.name)
-                track = ctrack[0]
-                instr = ctrack[1]
-                self.controlled_track = track
-                index = list(self.song().tracks).index(track)
-                self.update_status_midi(index, track, instr, 1)
+            # # Reactivate another track is there were multiple ones armed
+            # ctrack = self.get_controlled_track()
+            # if ctrack:
+            #     debug_out("Activating other armed track: %s" % track.name)
+            #     track = ctrack[0]
+            #     instr = ctrack[1]
+            #     self.controlled_track = track
+            #     index = list(self.song().tracks).index(track)
+            #     self.update_status_midi(index, track, instr, 1)
 
     def devices_changed(self, index, track):
         debug_out(" DEVICES_CHANGED() Track " + str(index) + " " + track.name)
