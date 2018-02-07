@@ -10,6 +10,7 @@ from GUtil import debug_out, register_sender
 from _Generic import GenericScript
 from _Generic.SpecialMixerComponent import SpecialMixerComponent
 
+from _Framework import Task
 from _Framework.ControlSurface import ControlSurface
 from _Framework.InputControlElement import *
 from _Framework.ButtonElement import ButtonElement, ON_VALUE, OFF_VALUE
@@ -26,6 +27,7 @@ Created on 13.10.2013
 
 DEVICE_ROLE_DAW = 'KOMPLETE_KONTROL_DAW'
 DEVICE_ROLE_MIDI_KEYBOARD = 'KOMPLETE_KONTROL_MIDI_KEYBOARD'
+IMPLICIT_ARM_IS_ARM_MODE = False
 
 GLOBAL_CHANNEL = 0
 
@@ -110,34 +112,53 @@ def arm_smart(song, track=None):
 
 class TrackElement:
 
-    arm = False
+    allow_activate_track = False
 
     def __init__(self, index, track, receiver, *a, **k):
         self.index = index
         self.track = track
-        if track.can_be_armed:
-            self.arm = track.arm
-            track.add_arm_listener(self._changed_arming)
+
+        if receiver.device_role == DEVICE_ROLE_DAW:
+            if track.can_be_armed:
+                debug_out("Track can be armed: %s, %s" %
+                          (track.name, str(track)))
+                self.allow_activate_track = True
+                track.add_arm_listener(self._changed_arming)
+                track.add_implicit_arm_listener(self._changed_implicit_arming)
+            else:
+                debug_out("Track cannot be armed: %s, %s" %
+                          (track.name, str(track)))
+
         track.add_devices_listener(self._changed_devices)
 
         self.receiver = receiver
 
+    def _changed_implicit_arming(self):
+        debug_out("_changed_implicit_arming called on: %s, %s" %
+                  (self.track.name, str(self.track)))
+        self._handle_track_armed()
+
     def _changed_arming(self):
-        #debug_out(" _changed_arming() called")
-        if self.arm != self.track.arm:
-            self.arm = self.track.arm
-            if self.track.arm:
-                self.receiver.activate_track(self.index, self.track)
-            else:
-                self.receiver.deactivate_track(self.index, self.track)
+        debug_out(" _changed_arming() called")
+        self._handle_track_armed()
+
+    def _handle_track_armed(self):
+        if not self.track.arm and not self.track.implicit_arm:
+            self.receiver.deactivate_track(self.index, self.track)
+        elif self.allow_activate_track and \
+            (self.track.arm or (IMPLICIT_ARM_IS_ARM_MODE and
+                                (self.track.arm or self.track.implicit_arm))):
+            self.receiver.control_track(self.index, self.track)
 
     def _changed_devices(self):
-        if self.arm:
+        if self.allow_activate_track:
             self.receiver.devices_changed(self.index, self.track)
 
     def release(self):
         if self.track and self.track.can_be_armed:
             self.track.remove_arm_listener(self._changed_arming)
+            self.track.remove_implicit_arm_listener(
+                self._changed_implicit_arming)
         if self.track:
             self.track.remove_devices_listener(self._changed_devices)
         self.receiver = None
@@ -157,6 +178,8 @@ class FocusControl(ControlSurface):
         self.device_role = device_role
 
         register_sender(self)  # For Debug Output only
+
+        debug_out(str(dir(self)))
         self._active = False
         self._tracks = []
         self.rewind_button_down = False
@@ -485,13 +508,14 @@ class FocusControl(ControlSurface):
         tracks = self.song().tracks
 
         for track in tracks:
-            if track.can_be_armed and track.arm:
+            if track.can_be_armed and (track.arm or track.implicit_arm):
                 armed_tracks.append(track)
 
-        if len(armed_tracks) == 1:
-            return (armed_tracks[0], self.find_instrument_list(armed_tracks[0].devices))
+        # if len(armed_tracks) == 1:
+        # return (armed_tracks[0],
+        # self.find_instrument_list(armed_tracks[0].devices))
 
-        if len(armed_tracks) > 1:
+        if len(armed_tracks) > 0:
             instr = self.find_instrument_ni(armed_tracks)
             if instr:
                 return instr
@@ -503,7 +527,7 @@ class FocusControl(ControlSurface):
     def find_instrument_ni(self, tracks):
         for track in tracks:
             instr = self.find_instrument_list(track.devices)
-            if instr and instr[1] != None:
+            if instr and instr[1] is not None:
                 return (track, instr)
         return None
 
@@ -525,22 +549,50 @@ class FocusControl(ControlSurface):
         for index in range(len(tracks)):
             self._tracks.append(TrackElement(index, tracks[index], self))
 
-    def activate_track(self, index, track):
-        self.controlled_track = track
-        instr = self.find_instrument_list(track.devices)
-        #debug_out(" ACTIVATE_TRACK(): " + track.name + "   " + str(instr))
+    def control_track(self, index, track):
+        if self.controlled_track != track:
+            self.controlled_track = track
+            instr = self.find_instrument_list(track.devices)
+            debug_out("CONTROL_TRACK(): " +
+                      track.name + "   " + str(instr))
+            if track.implicit_arm and not track.arm:
+                debug_out("going to arm implicit_armed track")
+
+            run_task = Task.run(
+                lambda: self.activate_track(index, track, instr))
+            task_seq = Task.sequence(Task.delay(1), run_task)
+            self._tasks.add(task_seq)
+        else:
+            debug_out("Not re-activating controlled track %s" % track.name)
+
+    def activate_track(self, index, track, instr):
+        is_ni = instr is not None and instr[1] is not None
+        debug_out("ACTIVATE_TRACK(): %s %s (%s)" %
+                  (track.name, str(instr), "NI" if is_ni else "non-NI"))
+        track.arm = True
         self.update_status_midi(index, track, instr, 1)
 
     def deactivate_track(self, index, track):
-        pass
-        #instr = self.find_instrument_list(track.devices)
-        #self.update_status_midi(index, track, instr, 0)
-        # if self.controlled_track and self.controlled_track == track:
-        #self.controlled_track = None
-        #debug_out("NO Controlled Track ")
+        debug_out("DEACTIVATE_TRACK called: %s" % track.name)
+        # instr = self.find_instrument_list(track.devices)
+        # self.update_status_midi(index, track, instr, 0)
+
+        if self.controlled_track and self.controlled_track == track:
+            self.controlled_track = None
+            debug_out("Releasing controlled Track")
+
+            # # Reactivate another track is there were multiple ones armed
+            # ctrack = self.get_controlled_track()
+            # if ctrack:
+            #     debug_out("Activating other armed track: %s" % track.name)
+            #     track = ctrack[0]
+            #     instr = ctrack[1]
+            #     self.controlled_track = track
+            #     index = list(self.song().tracks).index(track)
+            #     self.update_status_midi(index, track, instr, 1)
 
     def devices_changed(self, index, track):
-        #debug_out(" DEVICES_CHANGED() Track " + str(index) + " " + track.name)
+        debug_out(" DEVICES_CHANGED() Track " + str(index) + " " + track.name)
         instr = self.find_instrument_list(track.devices)
         self.update_status_midi(index, track, instr, 1)
 
@@ -553,13 +605,15 @@ class FocusControl(ControlSurface):
         if ctrack:
             track = ctrack[0]
             instr = ctrack[1]
-            #debug_out("_ON_TRACK_LIST_CHANGED() called " + str(instr))
+            debug_out("_ON_TRACK_LIST_CHANGED() called " + str(instr))
             if track != self.controlled_track:
                 self.controlled_track = track
                 index = list(self.song().tracks).index(track)
+                debug_out(
+                    "_ON_TRACK_LIST_CHANGED: current track is not controlled_track")
                 #self.update_status_midi(index, track, instr, 1)
         elif self.controlled_track:  # No Armed Track with Instrument
-            #debug_out(" No More Controlled Track")
+            debug_out(" No More Controlled Track")
             self.controlled_track = None
 
     def _on_selected_track_changed(self):
@@ -569,14 +623,14 @@ class FocusControl(ControlSurface):
         # Block below was commented out because focus only follows track
         # arming, not selection. -kurt
 
-        #self._on_devices_changed.subject = self.song().view.selected_track
-        #track = self.song().view.selected_track
-        #debug_out(" Changed Selected Track " + track.name)
+        # self._on_devices_changed.subject = self.song().view.selected_track
+        # track = self.song().view.selected_track
+        # debug_out(" Changed Selected Track " + track.name)
         # if track.can_be_armed and track.arm:
-        #self.controlled_track = track
-        #instr = self.find_instrument_list(track.devices)
-        #index = list(self.song().tracks).index(track)
-        #self.update_status_midi(index, track, instr, 1)
+        #     self.controlled_track = track
+        # instr = self.find_instrument_list(track.devices)
+        # index = list(self.song().tracks).index(track)
+        # self.update_status_midi(index, track, instr, 1)
 
     def broadcast(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -603,30 +657,60 @@ class FocusControl(ControlSurface):
         return None
 
     def find_in_chain(self, chain):
+        devices_instr_pairs = []
         for device in chain.devices:
             instr = self.find_instrument(device)
             if instr:
-                return instr
-        return None
+                debug_out("Found instrument. device=%s, instr=%s, chain=%s" % (
+                    device, instr, chain))
+                devices_instr_pairs.append((device, instr))
+
+        for (device, instr) in devices_instr_pairs:
+            if self.device_is_ni(device):
+                return (device, instr)
+
+        if len(devices_instr_pairs) > 0:
+            return devices_instr_pairs[0]
+
+        return (None, None)
+
+    def device_is_ni(self, device):
+        return (device.class_name == PLUGIN_CLASS_NAME_VST or device.class_name == PLUGIN_CLASS_NAME_AU) and (device.class_display_name.startswith(PLUGIN_PREFIX))
 
     def find_instrument(self, device):
-        #debug_out(" find_instrument() called")
+        debug_out("find_instrument() called. type=%s, name=%s, class_name=%s, class_display_name=%s, parameters=%s" % (
+            device.type, device.name, device.class_name, device.class_display_name, ','.join([p.name for p in device.parameters])))
         if device.type == 1:
+            debug_out("find_instrument() found device type 1")
             if device.can_have_chains:
                 chains = device.chains
+                device_instr_pairs = []
                 for chain in chains:
-                    instr = self.find_in_chain(chain)
+                    (device, instr) = self.find_in_chain(chain)
                     if instr:
-                        return instr
-            elif (device.class_name == PLUGIN_CLASS_NAME_VST or device.class_name == PLUGIN_CLASS_NAME_AU) and (device.class_display_name.startswith(PLUGIN_PREFIX)):
-                parms = device.parameters
-                if parms and len(parms) > 1:
-                    pn = parms[1].name
+                        if self.device_is_ni(device):
+                            return self.find_instrument(device)
+
+                        device_instr_pairs.append((device, instr))
+
+                if len(device_instr_pairs) > 0:
+                    return self.find_instrument(device_instr_pairs[0][0])
+
+            elif self.device_is_ni(device):
+                device_params = device.parameters
+                debug_out("find_instrument() found NI device")
+                if device_params and len(device_params) > 1:
+                    pn = device_params[1].name
+                    debug_out("device_params[1].name=%s" % (pn,))
                     pnLen = len(pn)
                     if pn.startswith(PARAM_PREFIX):
                         #debug_out("pn[1] starts with " + PARAM_PREFIX + " and str(pn[4:pnLen]) = " + str(pn[4:pnLen]))
                         return (str(device.class_display_name), str(pn[4:pnLen]))
+                else:
+                    debug_out(
+                        "insufficient device parameters. device attrs=%s" % str(dir(device)))
             return (device.class_display_name, None)
+
         return None
 
     def scan_chain(self, chain):
