@@ -27,6 +27,7 @@ Created on 13.10.2013
 
 DEVICE_ROLE_DAW = 'KOMPLETE_KONTROL_DAW'
 DEVICE_ROLE_MIDI_KEYBOARD = 'KOMPLETE_KONTROL_MIDI_KEYBOARD'
+IMPLICIT_ARM_IS_ARM_MODE = False
 
 GLOBAL_CHANNEL = 0
 
@@ -144,7 +145,9 @@ class TrackElement:
     def _handle_track_armed(self):
         if not self.track.arm and not self.track.implicit_arm:
             self.receiver.deactivate_track(self.index, self.track)
-        elif self.allow_activate_track and (self.track.arm or self.track.implicit_arm):
+        elif self.allow_activate_track and \
+            (self.track.arm or (IMPLICIT_ARM_IS_ARM_MODE and
+                                (self.track.arm or self.track.implicit_arm))):
             self.receiver.control_track(self.index, self.track)
 
     def _changed_devices(self):
